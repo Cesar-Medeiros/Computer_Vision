@@ -23,6 +23,17 @@ def load_image(fn):
     img = cv.imread(fn, cv.IMREAD_UNCHANGED)
     return img
 
+
+def capture_frame():
+    cap = cv.VideoCapture(0)
+    while(True):
+        ret, frame = cap.read()
+        cv.imshow('frame', frame)
+        if cv.waitKey(1) & 0xFF == ord('q'):
+            cap.release()
+            cv.destroyAllWindows()
+            return frame
+
 if __name__ == '__main__':
     print(__doc__)
 
@@ -31,4 +42,3 @@ if __name__ == '__main__':
 
     cv.waitKey(0)
     cv.destroyAllWindows()
-
