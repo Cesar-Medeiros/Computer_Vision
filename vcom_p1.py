@@ -69,7 +69,7 @@ def getContours(edges):
     contours,_ = cv.findContours(edges, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
     return contours
 
-def getApproxContour(contour):
+def getApproxContour(cnt):
     # between 1% and 5%
     epsilon = 0.04*cv.arcLength(cnt,True)
     approx = cv.approxPolyDP(cnt, epsilon, True)
@@ -166,7 +166,7 @@ if __name__ == '__main__':
 
     # load image
     # img = capture_frame()
-    img = load_image(IMAGES_SIMPLE_DIR + '1.jpg')
+    img = load_image(IMAGES_OTHER_DIR + '4.jpg')
     cv.imshow("Img", img)
 
     # Smooth image maintaing edges
@@ -227,7 +227,6 @@ if __name__ == '__main__':
             # discard noise
             if cv.contourArea(hull) < 100:
                 continue
-
 
             shape_name, shape = identifyShape(hull)
             x,y = center_cnt(hull)
