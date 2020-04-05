@@ -76,6 +76,12 @@ def getContours(edges):
     return contours
 
 
+def getCircleCountours(gray):
+    circles = cv.HoughCircles(
+        gray, cv.HOUGH_GRADIENT, 1, 120, param1=100, param2=50, minRadius=0, maxRadius=0)
+    return circles
+
+
 def getApproxContour(cnt):
     # between 1% and 5%
     epsilon = 0.04*cv.arcLength(cnt, True)
@@ -224,12 +230,24 @@ if __name__ == '__main__':
     height, width, channels = img.shape
     edge_canvas = np.zeros((height, width, 1), np.uint8)
 
+    # Find circles
+    circles = getCircleCountours(v)
+
+    if circles is not None:
+        circles = np.round(circles[0, :]).astype("int")
+        for (x, y, r) in circles:
+            cv.circle(img, (x, y), r, (255, 0, 0), 3)
+            cv.circle(img, (x, y), 2, (255, 0, 255), 3)
+            cv.putText(img, 'circle', (x, y),
+                       cv.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 0), 2)
+
     for i, mask in enumerate(masks):
 
         # find countours
         contours = getContours(mask)
 
         for cnt in contours:
+
             # close open contours
             hull = cv.convexHull(cnt)
 
