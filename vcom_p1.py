@@ -13,6 +13,9 @@ from __future__ import print_function
 import numpy as np
 import cv2 as cv
 
+import math  
+  
+
 IMAGES_DIR = 'images/'
 IMAGES_SIMPLE_DIR = IMAGES_DIR + 'simple/'
 IMAGES_COMPLEX_DIR = IMAGES_DIR + 'complex/'
@@ -39,12 +42,12 @@ def hsvRedSegmentation(img):
     hsv = cv.cvtColor(img,cv.COLOR_BGR2HSV)
 
     # first range of red
-    lower_red = np.array([0,200,50])
+    lower_red = np.array([0,150,50])
     upper_red = np.array([5,255,255])
     mask1 = cv.inRange(hsv,lower_red,upper_red)
 
     # second range of red
-    lower_red = np.array([170,200,50])
+    lower_red = np.array([170,150,50])
     upper_red = np.array([180,255,255])
     mask2 = cv.inRange(hsv,lower_red,upper_red)
 
@@ -72,6 +75,24 @@ def getApproxContour(contour):
     approx = cv.approxPolyDP(cnt, epsilon, True)
     return approx
 
+
+def relative_error(num1, num2):
+    return abs(num1-num2)/max(num1, num2)
+
+    
+def isCircle(cnt):
+    PI = 3.14
+
+    perimeter = cv.arcLength(cnt,True)
+    area = cv.contourArea(cnt)
+
+    radius_p = perimeter/(2*PI)
+    radius_a = math.sqrt(area/PI)
+
+    return (relative_error(radius_p,radius_a) < 0.01)
+
+
+
 def getShapeName(numVertices):
     text = ""
     if numVertices == 3:
@@ -81,10 +102,33 @@ def getShapeName(numVertices):
     elif numVertices == 8:
         text = "Octogon"
     else:
-        text = "Circle"
+        text = str(numVertices)
 
     return text
 
+def identifyShape(cnt):
+
+    shape_name = ""
+    shape = None
+
+    if isCircle(cnt):
+        shape_name = "Circle"
+        shape = cnt
+
+    else:
+        approx = getApproxContour(cnt)
+        shape_name = getShapeName(len(approx))
+        shape = approx
+
+    return shape_name, shape
+
+def center_cnt(cnt):
+    M = cv.moments(cnt)
+    cX = int(M["m10"]/M["m00"])
+    cY = int(M["m01"]/M["m00"])
+    
+    return cX, cY
+    
 def saturation_eq(img):
     hsv = cv.cvtColor(img,cv.COLOR_BGR2HSV)
     h, s, v = cv.split(hsv)
@@ -105,20 +149,24 @@ def test(img1):
     # Create zeros array to store the stretched image
     minmax_img = np.zeros((img1.shape[0],img1.shape[1]),dtype = 'uint8')
     
+    min_val = np.min(img1)
+    max_val = np.max(img1)
+    delta = max_val - min_val
+
     # Loop over the image and apply Min-Max formulae
     for i in range(img1.shape[0]):
         for j in range(img1.shape[1]):
-            minmax_img[i,j] = 255*(img1[i,j]-np.min(img1))/(np.max(img1)-np.min(img1))
+            minmax_img[i,j] = 255*(img1[i,j]-min_val)/delta
     
     return minmax_img
-
+    
 
 if __name__ == '__main__':
     print(__doc__)
 
     # load image
     # img = capture_frame()
-    img = load_image(IMAGES_COMPLEX_DIR + '1.jpg')
+    img = load_image(IMAGES_SIMPLE_DIR + '1.jpg')
     cv.imshow("Img", img)
 
     # Smooth image maintaing edges
@@ -129,7 +177,13 @@ if __name__ == '__main__':
 
     #Equalize saturation
     # img_eq = increase_sat(img, 1, 20)
-    img_eq = saturation_eq(img)
+    hsv = cv.cvtColor(img,cv.COLOR_BGR2HSV)
+    h, s, v = cv.split(hsv)
+    s = test(s)
+    cv.imshow("S", s)
+
+    merged_img = cv.merge([h,s,v])
+    img_eq = cv.cvtColor(merged_img,cv.COLOR_HSV2BGR)
 
     cv.imshow('ImgEq',img_eq)
    
@@ -141,20 +195,20 @@ if __name__ == '__main__':
                 hsvBlueSegmentation(img_eq)
             ]
     name = [
-        "red",
-        "blue"
+        "Red",
+        "Blue"
     ]
 
     for i, mask in enumerate(masks):
 
         # Remove small noise
-        mask = cv.medianBlur(mask, 3)
+        masks[i] = cv.medianBlur(masks[i], 3)
 
         # Close mask gaps
-        kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, (5, 5))
-        mask = cv.morphologyEx(mask, cv.MORPH_CLOSE, kernel)
+        kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, (10, 10))
+        masks[i] = cv.morphologyEx(masks[i], cv.MORPH_CLOSE, kernel)
 
-        cv.imshow('Mask' + str(i),mask)
+        cv.imshow('Mask' + str(i),masks[i])
 
 
     # Edge canvas
@@ -172,17 +226,15 @@ if __name__ == '__main__':
 
             # discard noise
             if cv.contourArea(hull) < 100:
-                cv.fillPoly(mask, pts =[cnt], color=(0,0,0))
                 continue
 
-            approx = getApproxContour(cnt)
-            x = approx.ravel()[0]
-            y = approx.ravel()[1]
-            shapeName = getShapeName(len(approx))
 
-            cv.drawContours(edge_canvas, [cnt], -1, (255, 255, 255), 1)
-            cv.drawContours(img, [approx], -1, (0, 255, 0), 2)
-            cv.putText(img, name[i] + ' ' + shapeName + ' ' + str(len(approx)), (x, y), cv.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 0), 2)
+            shape_name, shape = identifyShape(hull)
+            x,y = center_cnt(hull)
+
+            cv.drawContours(edge_canvas, [hull], -1, (255, 255, 255), 1)
+            cv.drawContours(img, [shape], -1, (0, 255, 0), 2)
+            cv.putText(img, name[i] + ' ' + shape_name, (x - 40, y), cv.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
     
 
     cv.imshow('Edges',edge_canvas)
