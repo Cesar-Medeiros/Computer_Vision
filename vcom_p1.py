@@ -44,12 +44,12 @@ def hsvRedSegmentation(img):
     hsv = cv.cvtColor(img, cv.COLOR_BGR2HSV)
 
     # first range of red
-    lower_red = np.array([0, 150, 50])
+    lower_red = np.array([0, 200, 75])
     upper_red = np.array([5, 255, 255])
     mask1 = cv.inRange(hsv, lower_red, upper_red)
 
     # second range of red
-    lower_red = np.array([170, 150, 50])
+    lower_red = np.array([170, 200, 75])
     upper_red = np.array([180, 255, 255])
     mask2 = cv.inRange(hsv, lower_red, upper_red)
 
@@ -60,7 +60,7 @@ def hsvRedSegmentation(img):
 
 def hsvBlueSegmentation(img):
     hsv = cv.cvtColor(img, cv.COLOR_BGR2HSV)
-    lower_blue = np.array([104, 200, 100])
+    lower_blue = np.array([104, 200, 75])
     upper_blue = np.array([115, 255, 255])
     mask = cv.inRange(hsv, lower_blue, upper_blue)
     return mask
@@ -104,7 +104,6 @@ def isCircle(cnt):
 
     return (relative_error(radius_p, radius_a) < 0.01)
 
-
 def getShapeName(numVertices):
     text = ""
     if numVertices == 3:
@@ -120,14 +119,12 @@ def getShapeName(numVertices):
 
 
 def identifyShape(cnt):
-
     shape_name = ""
     shape = None
 
     if isCircle(cnt):
         shape_name = "Circle"
         shape = cnt
-
     else:
         approx = getApproxContour(cnt)
         shape_name = getShapeName(len(approx))
@@ -143,6 +140,14 @@ def center_cnt(cnt):
 
     return cX, cY
 
+def value_eq(img):
+    hsv = cv.cvtColor(img, cv.COLOR_BGR2HSV)
+    h, s, v = cv.split(hsv)
+    new_v = cv.equalizeHist(v)
+    hsv_eq = cv.merge([h, s, new_v])
+    bgr_eq = cv.cvtColor(hsv_eq, cv.COLOR_HSV2BGR)
+    return bgr_eq
+
 
 def saturation_eq(img):
     hsv = cv.cvtColor(img, cv.COLOR_BGR2HSV)
@@ -151,6 +156,16 @@ def saturation_eq(img):
     hsv_eq = cv.merge([h, new_s, v])
     bgr_eq = cv.cvtColor(hsv_eq, cv.COLOR_HSV2BGR)
     return bgr_eq
+
+def saturation_eq2(img, gamma):
+    hsv = cv.cvtColor(img, cv.COLOR_BGR2HSV)
+    h, s, v = cv.split(hsv)
+    new_s = np.array(255*(s/255)**gamma,dtype='uint8')
+    hsv_eq = cv.merge([h, new_s, v])
+    bgr_eq = cv.cvtColor(hsv_eq, cv.COLOR_HSV2BGR)
+    return bgr_eq
+
+   
 
 
 def increase_sat(img, alpha, beta):
@@ -162,28 +177,46 @@ def increase_sat(img, alpha, beta):
     return bgr_eq
 
 
-def test(img1):
+def stretch_sat(img, min, max):
+    hsv = cv.cvtColor(img, cv.COLOR_BGR2HSV)
+    h, s, v = cv.split(hsv)
+
+    new_s = test(s, min, max)
+
+    hsv_eq = cv.merge([h, new_s, v])
+    bgr_eq = cv.cvtColor(hsv_eq, cv.COLOR_HSV2BGR)
+    return bgr_eq
+
+def show_sat(img, text):
+    hsv = cv.cvtColor(img, cv.COLOR_BGR2HSV)
+    h, s, v = cv.split(hsv)
+
+    cv.imshow(text, s)
+
+
+def test(img1, min_val, max_val):
+
     # Create zeros array to store the stretched image
     minmax_img = np.zeros((img1.shape[0], img1.shape[1]), dtype='uint8')
 
-    min_val = np.min(img1)
-    max_val = np.max(img1)
+    # min_val = np.min(img1)
+    # max_val = np.max(img1)
     delta = max_val - min_val
 
     # Loop over the image and apply Min-Max formulae
     for i in range(img1.shape[0]):
         for j in range(img1.shape[1]):
-            minmax_img[i, j] = 255*(img1[i, j]-min_val)/delta
+            new_val = 255*(img1[i, j]-min_val)/delta
+            new_val = max(0, min(new_val, 255))
+            minmax_img[i, j] = new_val
 
     return minmax_img
 
 
-if __name__ == '__main__':
-    print(__doc__)
-
+def main():
     # load image
     # img = capture_frame()
-    img = load_image(IMAGES_OTHER_DIR + '1.jpeg')
+    img = load_image(IMAGES_SIMPLE_DIR + '5.jpg')
     cv.imshow("Img", img)
 
     # Smooth image maintaing edges
@@ -194,16 +227,12 @@ if __name__ == '__main__':
     img = cv.GaussianBlur(img, (3, 3), 0)
 
     # Equalize saturation
-    # img_eq = increase_sat(img, 1, 20)
     hsv = cv.cvtColor(img, cv.COLOR_BGR2HSV)
     h, s, v = cv.split(hsv)
-    s = test(s)
-    cv.imshow("S", s)
+    quartil1 = np.quantile(s, .75)
+    quartil2 = np.quantile(s, .95)
+    img_eq = stretch_sat(img, quartil1, quartil2)
 
-    merged_img = cv.merge([h, s, v])
-    img_eq = cv.cvtColor(merged_img, cv.COLOR_HSV2BGR)
-
-    cv.imshow('ImgEq', img_eq)
 
     # hsv segmentation
     masks = [
@@ -215,16 +244,28 @@ if __name__ == '__main__':
         "Blue"
     ]
 
+
     for i, mask in enumerate(masks):
 
+        height, width = mask.shape
+
         # Remove small noise
-        masks[i] = cv.medianBlur(masks[i], 3)
+        mask = cv.medianBlur(mask, 3)
+
+        # Increase border to prevent dilate with canvas edges
+        border_size = 50
+        mask = cv.copyMakeBorder(mask, border_size, border_size, border_size, border_size, cv.BORDER_CONSTANT) 
 
         # Close mask gaps
-        kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, (10, 10))
-        masks[i] = cv.morphologyEx(masks[i], cv.MORPH_CLOSE, kernel)
+        kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, (30, 30))
+        mask = cv.morphologyEx(mask, cv.MORPH_CLOSE, kernel) 
+        
+        # Remove border
+        mask = mask[border_size:height + border_size, border_size:width + border_size]
 
+        masks[i] = mask
         cv.imshow('Mask' + str(i), masks[i])
+
 
     # Edge canvas
     height, width, channels = img.shape
@@ -238,8 +279,7 @@ if __name__ == '__main__':
         for (x, y, r) in circles:
             cv.circle(img, (x, y), r, (255, 0, 0), 3)
             cv.circle(img, (x, y), 2, (255, 0, 255), 3)
-            cv.putText(img, 'circle', (x, y),
-                       cv.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 0), 2)
+            cv.putText(img, 'circle', (x, y), cv.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 0), 2)
 
     for i, mask in enumerate(masks):
 
@@ -260,10 +300,15 @@ if __name__ == '__main__':
 
             cv.drawContours(edge_canvas, [hull], -1, (255, 255, 255), 1)
             cv.drawContours(img, [shape], -1, (0, 255, 0), 2)
-            cv.putText(img, name[i] + ' ' + shape_name, (x - 40, y),
-                       cv.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+            cv.putText(img, name[i] + ' ' + shape_name, (x - 40, y), cv.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
 
     cv.imshow('Edges', edge_canvas)
+    cv.imshow('ImgEq', img_eq)
     cv.imshow('Final', img)
     cv.waitKey(0)
     cv.destroyAllWindows()
+
+
+if __name__ == '__main__':
+    print(__doc__)
+    main()
