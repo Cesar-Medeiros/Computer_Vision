@@ -10,10 +10,11 @@ Usage:
 # Python 2/3 compatibility
 from __future__ import print_function
 
+import sys
 import numpy as np
-import cv2 as cv
-
 import math
+import argparse
+import cv2 as cv
 
 
 IMAGES_DIR = 'images/'
@@ -33,7 +34,7 @@ def capture_frame():
     cap = cv.VideoCapture(0)
     while(True):
         ret, frame = cap.read()
-        cv.imshow('Webcam', frame)
+        cv.imshow('Webcam - Press Q to select frame', frame)
         if cv.waitKey(1) & 0xFF == ord('q'):
             cap.release()
             cv.destroyAllWindows()
@@ -104,6 +105,7 @@ def isCircle(cnt):
 
     return (relative_error(radius_p, radius_a) < 0.01)
 
+
 def getShapeName(numVertices):
     text = ""
     if numVertices == 3:
@@ -140,6 +142,7 @@ def center_cnt(cnt):
 
     return cX, cY
 
+
 def value_eq(img):
     hsv = cv.cvtColor(img, cv.COLOR_BGR2HSV)
     h, s, v = cv.split(hsv)
@@ -157,15 +160,14 @@ def saturation_eq(img):
     bgr_eq = cv.cvtColor(hsv_eq, cv.COLOR_HSV2BGR)
     return bgr_eq
 
+
 def saturation_eq2(img, gamma):
     hsv = cv.cvtColor(img, cv.COLOR_BGR2HSV)
     h, s, v = cv.split(hsv)
-    new_s = np.array(255*(s/255)**gamma,dtype='uint8')
+    new_s = np.array(255*(s/255)**gamma, dtype='uint8')
     hsv_eq = cv.merge([h, new_s, v])
     bgr_eq = cv.cvtColor(hsv_eq, cv.COLOR_HSV2BGR)
     return bgr_eq
-
-   
 
 
 def increase_sat(img, alpha, beta):
@@ -186,6 +188,7 @@ def stretch_sat(img, min, max):
     hsv_eq = cv.merge([h, new_s, v])
     bgr_eq = cv.cvtColor(hsv_eq, cv.COLOR_HSV2BGR)
     return bgr_eq
+
 
 def show_sat(img, text):
     hsv = cv.cvtColor(img, cv.COLOR_BGR2HSV)
@@ -213,10 +216,8 @@ def test(img1, min_val, max_val):
     return minmax_img
 
 
-def main():
-    # load image
-    # img = capture_frame()
-    img = load_image(IMAGES_SIMPLE_DIR + '5.jpg')
+def main(img):
+    # Show image
     cv.imshow("Img", img)
 
     # Smooth image maintaing edges
@@ -224,7 +225,7 @@ def main():
     img = cv.bilateralFilter(bgr, 10, 30, 30)
 
     # Remove small noise from edges left from bilateral filter
-    img = cv.GaussianBlur(img, (3, 3), 0)
+    img = cv.medianBlur(img, 5)
 
     # Equalize saturation
     hsv = cv.cvtColor(img, cv.COLOR_BGR2HSV)
@@ -232,7 +233,6 @@ def main():
     quartil1 = np.quantile(s, .75)
     quartil2 = np.quantile(s, .95)
     img_eq = stretch_sat(img, quartil1, quartil2)
-
 
     # hsv segmentation
     masks = [
@@ -244,7 +244,6 @@ def main():
         "Blue"
     ]
 
-
     for i, mask in enumerate(masks):
 
         height, width = mask.shape
@@ -254,18 +253,19 @@ def main():
 
         # Increase border to prevent dilate with canvas edges
         border_size = 50
-        mask = cv.copyMakeBorder(mask, border_size, border_size, border_size, border_size, cv.BORDER_CONSTANT) 
+        mask = cv.copyMakeBorder(
+            mask, border_size, border_size, border_size, border_size, cv.BORDER_CONSTANT)
 
         # Close mask gaps
         kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, (30, 30))
-        mask = cv.morphologyEx(mask, cv.MORPH_CLOSE, kernel) 
-        
+        mask = cv.morphologyEx(mask, cv.MORPH_CLOSE, kernel)
+
         # Remove border
-        mask = mask[border_size:height + border_size, border_size:width + border_size]
+        mask = mask[border_size:height + border_size,
+                    border_size:width + border_size]
 
         masks[i] = mask
         cv.imshow('Mask' + str(i), masks[i])
-
 
     # Edge canvas
     height, width, channels = img.shape
@@ -279,7 +279,8 @@ def main():
         for (x, y, r) in circles:
             cv.circle(img, (x, y), r, (255, 0, 0), 3)
             cv.circle(img, (x, y), 2, (255, 0, 255), 3)
-            cv.putText(img, 'circle', (x, y), cv.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 0), 2)
+            cv.putText(img, 'circle', (x, y),
+                       cv.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 0), 2)
 
     for i, mask in enumerate(masks):
 
@@ -300,7 +301,8 @@ def main():
 
             cv.drawContours(edge_canvas, [hull], -1, (255, 255, 255), 1)
             cv.drawContours(img, [shape], -1, (0, 255, 0), 2)
-            cv.putText(img, name[i] + ' ' + shape_name, (x - 40, y), cv.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+            cv.putText(img, name[i] + ' ' + shape_name, (x - 40, y),
+                       cv.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
 
     cv.imshow('Edges', edge_canvas)
     cv.imshow('ImgEq', img_eq)
@@ -311,4 +313,26 @@ def main():
 
 if __name__ == '__main__':
     print(__doc__)
-    main()
+
+    file = None
+    img = None
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--d', help="The image subdirectory")
+    parser.add_argument('--f', help="The image file name")
+
+    args = parser.parse_args()
+    if (len(sys.argv) > 1):
+        if (args.f and args.d is None):
+            args.d = ""
+        elif (args.f is None):
+            parser.print_help()
+            quit()
+        file = IMAGES_DIR + args.d + '/' + args.f
+
+    if (file):
+        img = load_image(file)
+    else:
+        img = capture_frame()
+
+    main(img)
