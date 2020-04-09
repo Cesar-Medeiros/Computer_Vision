@@ -16,7 +16,6 @@ import math
 import argparse
 import cv2 as cv
 
-
 IMAGES_DIR = 'images/'
 IMAGES_SIMPLE_DIR = IMAGES_DIR + 'simple/'
 IMAGES_COMPLEX_DIR = IMAGES_DIR + 'complex/'
@@ -25,7 +24,7 @@ IMAGES_OTHER_DIR = IMAGES_DIR + 'other/'
 
 def load_image(fn):
     fn = cv.samples.findFile(fn)
-    print('loading "%s" ...' % fn)
+    print('\tLoading "%s" ...' % fn)
     img = cv.imread(fn, cv.IMREAD_UNCHANGED)
     return img
 
@@ -216,7 +215,29 @@ def test(img1, min_val, max_val):
     return minmax_img
 
 
+def optionMenu():
+    choice = raw_input("""
+        For circle detection, please select one of the following methods:
+
+        A: Simple Shape Detection using Contour approximation
+        B: Circle Hough Transform
+
+        ==> """)
+
+    choice = choice.lower()
+
+    if choice != "a" and choice != "b":
+        print("\n\tYou must only select either A or B")
+        print("\tPlease try again!\n")
+        optionMenu()
+
+    return choice == "b"
+
+
 def main(img):
+    # Ask if Circle Hough Transform is to be chosen
+    useHough = optionMenu()
+
     # Show image
     cv.imshow("Img", img)
 
@@ -271,16 +292,16 @@ def main(img):
     height, width, channels = img.shape
     edge_canvas = np.zeros((height, width, 1), np.uint8)
 
-    # Find circles
-    circles = getCircleCountours(v)
-
-    if circles is not None:
-        circles = np.round(circles[0, :]).astype("int")
-        for (x, y, r) in circles:
-            cv.circle(img, (x, y), r, (255, 0, 0), 3)
-            cv.circle(img, (x, y), 2, (255, 0, 255), 3)
-            cv.putText(img, 'circle', (x, y),
-                       cv.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 0), 2)
+    # Find circles with Hough Transform, if chosen
+    if (useHough):
+        circles = getCircleCountours(v)
+        if circles is not None:
+            circles = np.round(circles[0, :]).astype("int")
+            for (x, y, r) in circles:
+                cv.circle(img, (x, y), r, (255, 0, 0), 3)
+                cv.circle(img, (x, y), 2, (255, 0, 255), 3)
+                cv.putText(img, 'Circle', (x, y),
+                           cv.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 0), 2)
 
     for i, mask in enumerate(masks):
 
@@ -298,6 +319,9 @@ def main(img):
 
             shape_name, shape = identifyShape(hull)
             x, y = center_cnt(hull)
+
+            if (shape_name == "Circle" and useHough):
+                continue
 
             cv.drawContours(edge_canvas, [hull], -1, (255, 255, 255), 1)
             cv.drawContours(img, [shape], -1, (0, 255, 0), 2)
