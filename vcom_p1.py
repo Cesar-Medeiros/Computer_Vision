@@ -381,21 +381,12 @@ def main(img):
 if __name__ == '__main__':
     print(__doc__)
 
-    file = None
-    img = None
-
     parser = argparse.ArgumentParser()
-    parser.add_argument('--d', help="The image subdirectory")
-    parser.add_argument('--f', help="The image file name")
+    parser.add_argument('--f', help="The image filepath")
 
-    args = parser.parse_args()
-    if (len(sys.argv) > 1):
-        if (args.f and args.d is None):
-            args.d = ""
-        elif (args.f is None):
-            parser.print_help()
-            quit()
-        file = IMAGES_DIR + args.d + '/' + args.f
+    img = None
+    file = parser.parse_args().f
+
     if (file):
         img = load_image(file)
     else:
