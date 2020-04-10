@@ -21,6 +21,9 @@ IMAGES_SIMPLE_DIR = IMAGES_DIR + 'simple/'
 IMAGES_COMPLEX_DIR = IMAGES_DIR + 'complex/'
 IMAGES_OTHER_DIR = IMAGES_DIR + 'other/'
 
+IMAGE_SCALE_WIDTH = 500
+IMAGE_SCALE_HEIGHT = 500
+
 
 def load_image(fn):
     fn = cv.samples.findFile(fn)
@@ -61,7 +64,7 @@ def hsvRedSegmentation(img):
 def hsvBlueSegmentation(img):
     hsv = cv.cvtColor(img, cv.COLOR_BGR2HSV)
     lower_blue = np.array([104, 200, 75])
-    upper_blue = np.array([115, 255, 255])
+    upper_blue = np.array([126, 255, 255])
     mask = cv.inRange(hsv, lower_blue, upper_blue)
     return mask
 
@@ -216,7 +219,7 @@ def test(img1, min_val, max_val):
 
 
 def optionMenu():
-    choice = raw_input("""
+    choice = input("""
         For circle detection, please select one of the following methods:
 
         A: Simple Shape Detection using Contour approximation
@@ -234,9 +237,35 @@ def optionMenu():
     return choice == "b"
 
 
+def scale_image(img, width, height):
+    height_ori, width_ori, _ = img.shape
+   
+    scale_h = height/height_ori
+    scale_w  = width/width_ori
+
+    scale = min(scale_h, scale_w)
+
+    width = int( width_ori * scale)
+    height = int (height_ori * scale)
+    print("Original size:", width_ori, height_ori)
+    print("New size:", width, height)
+    return cv.resize(img, (width, height), interpolation = cv.INTER_LINEAR)
+
+def circular_section(img, circle):
+
+    x,y,r = circle
+    mask = np.zeros_like(img)
+    cv.circle(mask, (x, y), r, (255, 255, 255), cv.FILLED)
+    out = np.zeros_like(img)
+    out[mask == 255] = img[mask == 255]
+
+    return out
+
 def main(img):
     # Ask if Circle Hough Transform is to be chosen
     useHough = optionMenu()
+
+    img = scale_image(img, IMAGE_SCALE_WIDTH, IMAGE_SCALE_HEIGHT)
 
     # Show image
     cv.imshow("Img", img)
@@ -249,11 +278,14 @@ def main(img):
     img = cv.medianBlur(img, 5)
 
     # Equalize saturation
-    hsv = cv.cvtColor(img, cv.COLOR_BGR2HSV)
-    h, s, v = cv.split(hsv)
-    quartil1 = np.quantile(s, .75)
-    quartil2 = np.quantile(s, .95)
-    img_eq = stretch_sat(img, quartil1, quartil2)
+    img_eq = saturation_eq(img)
+
+    # hsv = cv.cvtColor(img, cv.COLOR_BGR2HSV)
+    # h, s, v = cv.split(hsv)
+    # quartil1 = np.quantile(s, .75)
+    # quartil2 = np.quantile(s, .95)
+    # img_eq = stretch_sat(img, quartil1, quartil2)
+
 
     # hsv segmentation
     masks = [
@@ -294,9 +326,20 @@ def main(img):
 
     # Find circles with Hough Transform, if chosen
     if (useHough):
+        hsv = cv.cvtColor(img, cv.COLOR_BGR2HSV)
+        h, s, v = cv.split(hsv)
         circles = getCircleCountours(v)
+
         if circles is not None:
             circles = np.round(circles[0, :]).astype("int")
+
+            i = 0
+            for circle in circles:
+                i+=1
+                section = circular_section(img, circle)
+                section = saturation_eq(section)
+                mask  = hsvRedSegmentation(section)
+
             for (x, y, r) in circles:
                 cv.circle(img, (x, y), r, (255, 0, 0), 3)
                 cv.circle(img, (x, y), 2, (255, 0, 255), 3)
@@ -353,7 +396,6 @@ if __name__ == '__main__':
             parser.print_help()
             quit()
         file = IMAGES_DIR + args.d + '/' + args.f
-
     if (file):
         img = load_image(file)
     else:
